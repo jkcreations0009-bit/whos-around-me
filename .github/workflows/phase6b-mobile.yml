@@ -1,0 +1,166 @@
+name: Phase 6B Mobile Verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase6b-mobile-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: "3.47.0"
+  PAYLOAD_SHA256: "dedde098d74b003ab837e567c36bf09bd2d38d8862d14fac6a6ec3f380ee7544"
+
+jobs:
+  android:
+    name: Flutter + Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout verification repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Reconstruct verified Phase 6B source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, tarfile
+          parts = sorted(pathlib.Path('.ci/payload').glob('part*.b64'))
+          assert len(parts) == 3, f"expected 3 payload parts, found {len(parts)}"
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          expected = '${{ env.PAYLOAD_SHA256 }}'
+          actual = hashlib.sha256(archive).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'payload checksum mismatch: {actual} != {expected}')
+          pathlib.Path('phase6b.tar.xz').write_bytes(archive)
+          with tarfile.open('phase6b.tar.xz', 'r:xz') as tf:
+              tf.extractall('.')
+          print(f'Payload verified: {actual}')
+          PY
+
+      - name: Install official Flutter stable tag
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Verify runner toolchain
+        shell: bash
+        run: |
+          flutter --version
+          dart --version
+          java -version
+          echo "ANDROID_HOME=${ANDROID_HOME:-}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+          command -v adb || true
+          command -v sdkmanager || true
+          flutter doctor -v
+
+      - name: Bootstrap Flutter source and run Dart checks/tests
+        shell: bash
+        run: |
+          cd ci_payload
+          APP_ORG=com.dC0dez ./tools/bootstrap_flutter.sh
+
+      - name: Run backend privacy/location regression
+        shell: bash
+        run: |
+          cd ci_payload/backend/functions
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run build
+          npm run test:core
+
+      - name: Build all Android environment flavors
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          flutter build apk --debug --flavor development --dart-define=APP_ENV=development
+          flutter build apk --debug --flavor test --dart-define=APP_ENV=test
+          flutter build apk --debug --flavor staging --dart-define=APP_ENV=staging
+          flutter build apk --debug --flavor production --dart-define=APP_ENV=production
+
+      - name: Confirm exact Android application IDs in Gradle source
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          grep -F 'applicationId = "com.dC0dez.Whosaroundme.dev"' android/app/build.gradle.kts
+          grep -F 'applicationId = "com.dC0dez.Whosaroundme.test"' android/app/build.gradle.kts
+          grep -F 'applicationId = "com.dC0dez.Whosaroundme.staging"' android/app/build.gradle.kts
+          grep -F 'applicationId = "com.dC0dez.Whosaroundme"' android/app/build.gradle.kts
+          ! grep -R 'ACCESS_BACKGROUND_LOCATION' android/app/src/main/AndroidManifest.xml
+
+  ios:
+    name: Flutter + macOS/Xcode
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout verification repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Reconstruct verified Phase 6B source
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, tarfile
+          parts = sorted(pathlib.Path('.ci/payload').glob('part*.b64'))
+          assert len(parts) == 3, f"expected 3 payload parts, found {len(parts)}"
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          expected = '${{ env.PAYLOAD_SHA256 }}'
+          actual = hashlib.sha256(archive).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'payload checksum mismatch: {actual} != {expected}')
+          pathlib.Path('phase6b.tar.xz').write_bytes(archive)
+          with tarfile.open('phase6b.tar.xz', 'r:xz') as tf:
+              tf.extractall('.')
+          print(f'Payload verified: {actual}')
+          PY
+
+      - name: Install official Flutter stable tag
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Verify macOS/Xcode toolchain
+        shell: bash
+        run: |
+          flutter --version
+          dart --version
+          xcodebuild -version
+          swiftc --version
+          flutter doctor -v
+
+      - name: Bootstrap Flutter source and run Dart checks/tests
+        shell: bash
+        run: |
+          cd ci_payload
+          APP_ORG=com.dC0dez ./tools/bootstrap_flutter.sh
+
+      - name: Parse native Swift bridge
+        shell: bash
+        run: |
+          swiftc -frontend -parse ci_payload/native_overlays/ios/AppDelegate.swift
+
+      - name: Build iOS production simulator app with Xcode
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          flutter build ios --simulator --no-codesign --dart-define=APP_ENV=production
+
+      - name: Verify iOS privacy configuration and bundle ID
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          /usr/libexec/PlistBuddy -c 'Print :NSContactsUsageDescription' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' ios/Runner/Info.plist
+          if /usr/libexec/PlistBuddy -c 'Print :NSLocationAlwaysUsageDescription' ios/Runner/Info.plist >/dev/null 2>&1; then exit 1; fi
+          if /usr/libexec/PlistBuddy -c 'Print :NSLocationAlwaysAndWhenInUseUsageDescription' ios/Runner/Info.plist >/dev/null 2>&1; then exit 1; fi
+          grep -F 'PRODUCT_BUNDLE_IDENTIFIER = com.dC0dez.Whosaroundme;' ios/Runner.xcodeproj/project.pbxproj
+          xcodebuild -list -project ios/Runner.xcodeproj
