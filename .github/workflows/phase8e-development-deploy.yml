@@ -1,0 +1,189 @@
+name: Phase 8E Firebase Development Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: "Type DEPLOY_WHO_S_AROUND_ME_DEVELOPMENT to authorize a development-only deploy"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase8e-firebase-development-deploy
+  cancel-in-progress: false
+
+env:
+  PAYLOAD_SHA256: "dedde098d74b003ab837e567c36bf09bd2d38d8862d14fac6a6ec3f380ee7544"
+  FIREBASE_TOOLS_VERSION: "15.27.0"
+
+jobs:
+  deploy:
+    name: Verify then deploy Firebase development backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: development
+    env:
+      PHASE8E_DEPLOY_CONFIRMATION: ${{ inputs.confirmation }}
+      FIREBASE_PROJECT_ID_DEV: ${{ secrets.FIREBASE_PROJECT_ID_DEV }}
+      FIREBASE_SERVICE_ACCOUNT_JSON_B64: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON_B64 }}
+
+    steps:
+      - name: Checkout exact repository revision
+        uses: actions/checkout@v7.0.1
+
+      - name: Reject missing deployment authorization before touching credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$PHASE8E_DEPLOY_CONFIRMATION" != "DEPLOY_WHO_S_AROUND_ME_DEVELOPMENT" ]; then
+            echo "BLOCKED: explicit development deployment confirmation did not match."
+            exit 2
+          fi
+          if [ -z "${FIREBASE_PROJECT_ID_DEV:-}" ]; then
+            echo "BLOCKED: FIREBASE_PROJECT_ID_DEV is not configured in the protected development environment."
+            exit 2
+          fi
+          if [ -z "${FIREBASE_SERVICE_ACCOUNT_JSON_B64:-}" ]; then
+            echo "BLOCKED: FIREBASE_SERVICE_ACCOUNT_JSON_B64 is not configured in the protected development environment."
+            exit 2
+          fi
+          echo "PASS: manual development deployment authorization and secret presence checks."
+
+      - name: Reconstruct verified source and apply Phase 7 through Phase 8E
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, tarfile
+          parts = sorted(pathlib.Path('.ci/payload').glob('part*.b64'))
+          assert len(parts) == 3, f"expected 3 payload parts, found {len(parts)}"
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          expected = '${{ env.PAYLOAD_SHA256 }}'
+          actual = hashlib.sha256(archive).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'payload checksum mismatch: {actual} != {expected}')
+          pathlib.Path('phase6b.tar.xz').write_bytes(archive)
+          with tarfile.open('phase6b.tar.xz', 'r:xz') as tf:
+              tf.extractall('.')
+          print(f'Payload verified: {actual}')
+          PY
+          cp .ci/overrides/nearby_local_screen.dart ci_payload/apps/mobile/lib/features/nearby/nearby_local_screen.dart
+          cp .ci/overrides/widget_test.dart ci_payload/apps/mobile/test/widget_test.dart
+          cp .ci/overrides/apply_native_overlays.py ci_payload/tools/apply_native_overlays.py
+          cp -R .ci/phase7_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase7.py
+          cp -R .ci/phase8_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8a.py
+          cp -R .ci/phase8b_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8b.py
+          cp -R .ci/phase8c_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8c.py
+          cp -R .ci/phase8d_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8d.py
+          cp -R .ci/phase8e_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8e.py
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Compile and execute backend regressions before deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/backend/functions
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run build
+          npm run test:core
+
+      - name: Set up Java 21 for Firestore emulator
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Execute Firestore Security Rules emulator tests before deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/firebase/test
+          npm install --ignore-scripts --no-audit --no-fund
+          cd ../..
+          npx --yes firebase-tools@${FIREBASE_TOOLS_VERSION} emulators:exec \
+            --project demo-whos-around-me \
+            --only firestore \
+            --config firebase.json \
+            "cd firebase/test && npm test"
+
+      - name: Materialize service-account credential only in runner temp
+        shell: bash
+        run: |
+          set -euo pipefail
+          credential_path="$RUNNER_TEMP/firebase-development-service-account.json"
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON_B64" | base64 --decode > "$credential_path"
+          chmod 600 "$credential_path"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$credential_path" >> "$GITHUB_ENV"
+          echo "FIREBASE_SERVICE_ACCOUNT_JSON_B64=" >> "$GITHUB_ENV"
+
+      - name: Validate development credential and target match
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload
+          python3 tools/phase8e_deploy_preflight.py
+
+      - name: Verify Firebase CLI can see the requested development project
+        shell: bash
+        run: |
+          set -euo pipefail
+          projects_json="$RUNNER_TEMP/firebase-projects.json"
+          npx --yes firebase-tools@${FIREBASE_TOOLS_VERSION} projects:list --json > "$projects_json"
+          python3 - "$projects_json" "$FIREBASE_PROJECT_ID_DEV" <<'PY'
+          import json, sys
+          path, expected = sys.argv[1:3]
+          payload = json.load(open(path, encoding='utf-8'))
+          rows = payload.get('result', []) if isinstance(payload, dict) else []
+          ids = {
+              str(row.get('projectId', '')).strip()
+              for row in rows
+              if isinstance(row, dict)
+          }
+          if expected not in ids:
+              raise SystemExit('BLOCKED: authenticated Firebase CLI cannot access the requested development project')
+          print('PASS: authenticated Firebase CLI can access the requested development project.')
+          PY
+
+      - name: Deploy Firestore rules and Cloud Functions to development only
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload
+          npx --yes firebase-tools@${FIREBASE_TOOLS_VERSION} deploy \
+            --non-interactive \
+            --project "$FIREBASE_PROJECT_ID_DEV" \
+            --config firebase.deploy.json \
+            --only firestore:rules,functions
+
+      - name: Record non-secret deployment evidence
+        shell: bash
+        run: |
+          {
+            echo "## Phase 8E Firebase development deployment"
+            echo "- Repository SHA: \`$GITHUB_SHA\`"
+            echo "- Firebase project: \`$FIREBASE_PROJECT_ID_DEV\`"
+            echo "- Firebase CLI: \`$FIREBASE_TOOLS_VERSION\`"
+            echo "- Scope: Firestore rules + Cloud Functions"
+            echo "- Credential contents: not persisted or printed"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary credential
+        if: always()
+        shell: bash
+        run: |
+          rm -f "$RUNNER_TEMP/firebase-development-service-account.json"

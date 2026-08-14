@@ -1,0 +1,148 @@
+name: Phase 8E Development Deployment Readiness
+
+on:
+  push:
+    branches: [phase8e-dev-deployment-readiness]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase8e-development-readiness-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PAYLOAD_SHA256: "dedde098d74b003ab837e567c36bf09bd2d38d8862d14fac6a6ec3f380ee7544"
+
+jobs:
+  readiness:
+    name: Phase 8E Backend Deployment Readiness
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout verification repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Reconstruct baseline and apply Phase 7 through Phase 8E
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, tarfile
+          parts = sorted(pathlib.Path('.ci/payload').glob('part*.b64'))
+          assert len(parts) == 3, f"expected 3 payload parts, found {len(parts)}"
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          expected = '${{ env.PAYLOAD_SHA256 }}'
+          actual = hashlib.sha256(archive).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'payload checksum mismatch: {actual} != {expected}')
+          pathlib.Path('phase6b.tar.xz').write_bytes(archive)
+          with tarfile.open('phase6b.tar.xz', 'r:xz') as tf:
+              tf.extractall('.')
+          print(f'Payload verified: {actual}')
+          PY
+          cp .ci/overrides/nearby_local_screen.dart ci_payload/apps/mobile/lib/features/nearby/nearby_local_screen.dart
+          cp .ci/overrides/widget_test.dart ci_payload/apps/mobile/test/widget_test.dart
+          cp .ci/overrides/apply_native_overlays.py ci_payload/tools/apply_native_overlays.py
+          cp -R .ci/phase7_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase7.py
+          cp -R .ci/phase8_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8a.py
+          cp -R .ci/phase8b_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8b.py
+          cp -R .ci/phase8c_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8c.py
+          cp -R .ci/phase8d_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8d.py
+          cp -R .ci/phase8e_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8e.py
+
+      - name: Prove real deployment workflow is manual and development-scoped
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflow=.github/workflows/phase8e-development-deploy.yml
+          grep -F 'workflow_dispatch:' "$workflow"
+          ! grep -F 'push:' "$workflow"
+          grep -F 'environment: development' "$workflow"
+          grep -F 'DEPLOY_WHO_S_AROUND_ME_DEVELOPMENT' "$workflow"
+          grep -F 'FIREBASE_PROJECT_ID_DEV' "$workflow"
+          grep -F 'FIREBASE_SERVICE_ACCOUNT_JSON_B64' "$workflow"
+          grep -F -- '--only firestore:rules,functions' "$workflow"
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Compile and execute identity/security backend regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/backend/functions
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run build
+          npm run test:core
+
+      - name: Set up Java 21 for Firestore emulator
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Execute Firestore Security Rules emulator regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/firebase/test
+          npm install --ignore-scripts --no-audit --no-fund
+          cd ../..
+          npx --yes firebase-tools@15.27.0 emulators:exec \
+            --project demo-whos-around-me \
+            --only firestore \
+            --config firebase.json \
+            "cd firebase/test && npm test"
+
+      - name: Test deployment credential preflight with synthetic non-secret fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          fake="$RUNNER_TEMP/fake-development-service-account.json"
+          cat > "$fake" <<'JSON'
+          {
+            "type": "service_account",
+            "project_id": "whos-around-me-dev-readiness",
+            "client_email": "ci-readiness@whos-around-me-dev-readiness.iam.gserviceaccount.com",
+            "private_key": "-----BEGIN PRIVATE KEY-----\nSYNTHETIC-NOT-A-REAL-KEY\n-----END PRIVATE KEY-----\n"
+          }
+          JSON
+          cd ci_payload
+          PHASE8E_DEPLOY_CONFIRMATION=DEPLOY_WHO_S_AROUND_ME_DEVELOPMENT \
+          FIREBASE_PROJECT_ID_DEV=whos-around-me-dev-readiness \
+          GOOGLE_APPLICATION_CREDENTIALS="$fake" \
+          python3 tools/phase8e_deploy_preflight.py
+
+          if PHASE8E_DEPLOY_CONFIRMATION=DEPLOY_WHO_S_AROUND_ME_DEVELOPMENT \
+             FIREBASE_PROJECT_ID_DEV=wrong-development-project \
+             GOOGLE_APPLICATION_CREDENTIALS="$fake" \
+             python3 tools/phase8e_deploy_preflight.py; then
+            echo 'FAIL: mismatched credential/project was incorrectly accepted.'
+            exit 1
+          fi
+          echo 'PASS: mismatched credential/project fails closed.'
+          rm -f "$fake"
+
+      - name: Record unresolved external/native blockers
+        shell: bash
+        run: |
+          {
+            echo '## Phase 8E readiness result'
+            echo '- Deployment tooling/policy: verified by CI'
+            echo '- Actual Firebase development deployment: **NOT EXECUTED**'
+            echo '- Real Auth/App Check attestation: **NOT EXECUTED**'
+            echo '- Distinct iOS development scheme/bundle mapping: **BLOCKED / not configured**'
+            echo '- Physical two-device security E2E: **NOT EXECUTED**'
+          } >> "$GITHUB_STEP_SUMMARY"
