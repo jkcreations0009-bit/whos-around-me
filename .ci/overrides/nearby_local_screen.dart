@@ -37,10 +37,8 @@ final class _NearbyLocalScreenState extends ConsumerState<NearbyLocalScreen> {
 
   @override
   void dispose() {
-    final StreamSubscription<List<LocalContact>>? subscription =
-        _contactsSubscription;
-    if (subscription != null) {
-      unawaited(subscription.cancel());
+    if (_contactsSubscription != null) {
+      unawaited(_contactsSubscription!.cancel());
     }
     super.dispose();
   }
