@@ -95,7 +95,7 @@ jobs:
           cd ci_payload/apps/mobile
           yes | flutter doctor --android-licenses >/dev/null 2>&1 || true
           flutter build apk --debug --flavor development --dart-define=APP_ENV=development
-          flutter build apk --debug --flavor testing --dart-define=APP_ENV=test
+          flutter build apk --debug --flavor qa --dart-define=APP_ENV=test
           flutter build apk --debug --flavor staging --dart-define=APP_ENV=staging
           flutter build apk --debug --flavor production --dart-define=APP_ENV=production
 
@@ -107,7 +107,7 @@ jobs:
           grep -F 'applicationId = "com.dC0dez.Whosaroundme.test"' android/app/build.gradle.kts
           grep -F 'applicationId = "com.dC0dez.Whosaroundme.staging"' android/app/build.gradle.kts
           grep -F 'applicationId = "com.dC0dez.Whosaroundme"' android/app/build.gradle.kts
-          grep -F 'create("testing")' android/app/build.gradle.kts
+          grep -F 'create("qa")' android/app/build.gradle.kts
           ! grep -R 'ACCESS_BACKGROUND_LOCATION' android/app/src/main/AndroidManifest.xml
 
   ios:
