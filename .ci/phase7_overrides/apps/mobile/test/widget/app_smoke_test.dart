@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nearby_contacts/app/app.dart';
@@ -106,5 +107,40 @@ void main() {
 
     expect(find.text('Near Person'), findsOneWidget);
     expect(find.text('Unknown Person'), findsNothing);
+  });
+
+  testWidgets('nearby screen stays scrollable on a phone-sized viewport', (
+    WidgetTester tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(360, 640));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final FakePlatformContactsService contacts = FakePlatformContactsService(
+      contacts: const <LocalContact>[
+        LocalContact(id: 'one', displayName: 'One Person'),
+        LocalContact(id: 'two', displayName: 'Two Person'),
+        LocalContact(id: 'three', displayName: 'Three Person'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          platformContactsServiceProvider.overrideWithValue(contacts),
+          platformLocationServiceProvider.overrideWithValue(
+            FakePlatformLocationService(),
+          ),
+          contactLocationRepositoryProvider.overrideWithValue(
+            FakeContactLocationRepository(),
+          ),
+        ],
+        child: const WhosAroundMeApp(),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.byType(CustomScrollView), findsOneWidget);
+    expect(find.text('Private Local Mode'), findsOneWidget);
   });
 }
