@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 checks = []
 errors = []
+
+layout_fix = ROOT / 'tools/apply_phase7_layout_fix.py'
+subprocess.run([sys.executable, str(layout_fix)], check=True)
 
 
 def req(condition: bool, message: str) -> None:
@@ -42,6 +46,10 @@ req('not published by this phase' in screen,
     'Private Local Mode publication boundary remains visible')
 req('live sharing' not in screen.lower(),
     'Phase7 screen does not activate live-sharing workflow')
+req('child: CustomScrollView(' in screen,
+    'Nearby screen uses a vertically scrollable responsive root')
+req('SliverFillRemaining(' in screen and 'SliverList(' in screen,
+    'empty and populated nearby states participate in one scrollable viewport')
 for boundary in ['1000m', '1001m', '5000m', '5001m', '20000m', '20001m']:
     req(boundary in unit, f'list-filter boundary test includes {boundary}')
 req('distance filter excludes contacts with unknown location' in widget,
