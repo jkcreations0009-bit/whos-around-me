@@ -1,0 +1,43 @@
+// Phase 8A security gate: identity/privacy/consent models may evolve, but
+// remote live-location publication remains explicitly disabled in this slice.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      // Phase 8A keeps privacy state server-controlled until callable/API
+      // mutation paths and App Check enforcement are implemented and tested.
+      allow create, update, delete: if false;
+
+      match /sharingGrants/{viewerUid} {
+        allow read: if isOwner(uid)
+          || (signedIn() && request.auth.uid == viewerUid);
+        allow write: if false;
+      }
+
+      match /blocks/{blockedUid} {
+        allow read: if isOwner(uid);
+        allow write: if false;
+      }
+    }
+
+    match /liveLocations/{uid} {
+      // Critical Phase 8A invariant: no client may transmit a live coordinate.
+      allow create, update: if false;
+      allow delete: if isOwner(uid);
+      allow read: if isOwner(uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
