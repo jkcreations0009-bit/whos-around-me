@@ -2,6 +2,8 @@ import { getApps, initializeApp } from "firebase-admin/app";
 import { getFirestore } from "firebase-admin/firestore";
 import { HttpsError, onCall } from "firebase-functions/v2/https";
 
+import { summarizeSharingGrants } from "../common/sharingDashboard";
+
 if (getApps().length === 0) initializeApp();
 const db = getFirestore();
 
@@ -66,23 +68,15 @@ export const getSharingDashboard = onCall(
     ]);
 
     const owner = ownerSnapshot.data() as Record<string, unknown> | undefined;
-    let authorizedViewerCount = 0;
-    let selectedAuthorizedViewerCount = 0;
-    let pendingViewerCount = 0;
-    let blockedViewerCount = 0;
-
-    for (const grant of grantsSnapshot.docs) {
-      const data = grant.data() as Record<string, unknown>;
-      const relationship = data.relationship;
-      if (relationship === "AUTHORIZED") {
-        authorizedViewerCount += 1;
-        if (data.selectedByOwner === true) selectedAuthorizedViewerCount += 1;
-      } else if (relationship === "PENDING") {
-        pendingViewerCount += 1;
-      } else if (relationship === "BLOCKED") {
-        blockedViewerCount += 1;
-      }
-    }
+    const audience = summarizeSharingGrants(
+      grantsSnapshot.docs.map((grant) => {
+        const data = grant.data() as Record<string, unknown>;
+        return {
+          relationship: data.relationship,
+          selectedByOwner: data.selectedByOwner,
+        };
+      }),
+    );
 
     const sessionId = activeSessionId(owner?.activeShareSessionId);
     let sessionExpiresAtMs: number | null = null;
@@ -99,10 +93,7 @@ export const getSharingDashboard = onCall(
     return {
       visibilityMode: visibility(owner?.visibility),
       liveSharingEnabled: owner?.liveSharingEnabled === true,
-      authorizedViewerCount,
-      selectedAuthorizedViewerCount,
-      pendingViewerCount,
-      blockedViewerCount,
+      ...audience,
       sessionExpiresAtMs,
     };
   },
