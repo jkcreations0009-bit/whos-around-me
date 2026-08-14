@@ -91,7 +91,12 @@ req('FirebaseLiveLocationGateway' not in nearby and 'publishLiveLocation' not in
 req('./common/liveLocationProtocol' in index and './callables/liveLocation' in index,
     'backend exports Phase 8C protocol and callable layer')
 req('activeShareSessionId: null' in privacy_callables and 'privacyEpoch:' in privacy_callables,
-    'existing Hidden/revoke/block path still invalidates session state')
+    'Hidden/revoke/block path still invalidates owner session state')
+req('ownerRef.collection("shareSessions").doc(sessionId)' in privacy_callables
+    and 'active: false' in privacy_callables,
+    'privacy invalidation explicitly deactivates the active share session')
+req('transaction.delete(liveLocationRef)' in privacy_callables,
+    'Hidden/revoke/block privacy invalidation deletes retained live-location data')
 
 print('PHASE 8C SECURE LIVE LOCATION VERIFICATION')
 for item in checks:
