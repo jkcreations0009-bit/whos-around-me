@@ -1,0 +1,25 @@
+Gate,Requirement,Status,Evidence
+P8C-01,Server-generated live share session,IMPLEMENTED,.ci/phase8c_overrides/backend/functions/src/callables/liveLocation.ts
+P8C-02,Session bound to privacyEpoch,IMPLEMENTED,.ci/phase8c_overrides/backend/functions/src/callables/liveLocation.ts
+P8C-03,Verified non-anonymous identity required,IMPLEMENTED,.ci/phase8c_overrides/backend/functions/src/callables/liveLocation.ts
+P8C-04,App Check + replay protection required,IMPLEMENTED,.ci/phase8c_overrides/backend/functions/src/callables/liveLocation.ts
+P8C-05,Coordinate bounds/freshness validation,TEST AUTOMATED,.ci/phase8c_overrides/backend/functions/test/liveLocationProtocol.test.ts
+P8C-06,Server-owned publish throttle,IMPLEMENTED,.ci/phase8c_overrides/backend/functions/src/callables/liveLocation.ts
+P8C-07,Mutual consent on viewer read,TEST AUTOMATED,.ci/phase8c_overrides/backend/functions/test/liveLocationProtocol.test.ts
+P8C-08,Selected-contact authorization,TEST AUTOMATED,.ci/phase8c_overrides/backend/functions/test/liveLocationProtocol.test.ts
+P8C-09,Old session/epoch fail closed,TEST AUTOMATED,.ci/phase8c_overrides/backend/functions/test/liveLocationProtocol.test.ts
+P8C-10,Hidden rejects viewer read and old upload,TEST AUTOMATED,.ci/phase8c_overrides/backend/functions/test/liveLocationProtocol.test.ts
+P8C-11,Hidden/revoke/block delete retained coordinate,IMPLEMENTED,.ci/phase8c_overrides/backend/functions/src/callables/privacyConsent.ts
+P8C-12,Direct client coordinate reads/writes denied,TEST AUTOMATED,.ci/phase8c_overrides/firebase/test/firestore.rules.test.mjs
+P8C-13,Owner emergency delete only,TEST AUTOMATED,.ci/phase8c_overrides/firebase/test/firestore.rules.test.mjs
+P8C-14,Neutral unavailable viewer response,IMPLEMENTED,.ci/phase8c_overrides/backend/functions/src/callables/liveLocation.ts
+P8C-15,Nearby UI does not silently activate sharing,TEST DESIGNED,.ci/phase8c_overrides/tools/verify_phase8c.py
+P8C-16,Phase 8C structural/security verifier,IN_PROGRESS,GitHub Actions final-head run
+P8C-17,Backend compile + protocol tests,IN_PROGRESS,GitHub Actions final-head run
+P8C-18,Firestore emulator tests,IN_PROGRESS,GitHub Actions final-head run
+P8C-19,Android Flutter analyze/tests + four flavors,IN_PROGRESS,GitHub Actions final-head run
+P8C-20,iOS Flutter tests + simulator build,IN_PROGRESS,GitHub Actions final-head run
+P8C-21,Actual Firebase dev deployment,NOT EXECUTED,Requires configured Firebase development project
+P8C-22,Real Auth + App Check attestation,NOT EXECUTED,Requires configured Firebase project and physical devices
+P8C-23,Two-device A share/B read/A hide/B denied,NOT EXECUTED,Requires physical devices and deployed backend
+P8C-24,Production readiness,NO,Real-device and deployment gates remain
