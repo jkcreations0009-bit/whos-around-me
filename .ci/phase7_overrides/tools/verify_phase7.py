@@ -54,8 +54,12 @@ for boundary in ['1000m', '1001m', '5000m', '5001m', '20000m', '20001m']:
     req(boundary in unit, f'list-filter boundary test includes {boundary}')
 req('distance filter excludes contacts with unknown location' in widget,
     'widget regression checks unknown location filtering')
+req('Size(360, 640)' in widget and 'CustomScrollView' in widget,
+    'phone-sized responsive widget regression exists')
 req('create("qa")' in overlay, 'Android Gradle-safe qa flavor retained')
 req('resValues = true' in overlay, 'AGP9 resValues opt-in retained')
+req('compileSdk = 37' in overlay,
+    'Android bridge compiles against API 37 for Contacts Picker APIs')
 
 print('PHASE 7 DISTANCE / LIST VERIFICATION')
 for item in checks:
