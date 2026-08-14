@@ -57,6 +57,16 @@ function numberOrNull(value: unknown): number | null {
     : null;
 }
 
+function timestampMillis(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number" && Number.isSafeInteger(value)) return value;
+  if (typeof value !== "object") return null;
+  const maybe = value as { toMillis?: unknown };
+  if (typeof maybe.toMillis !== "function") return null;
+  const result = (maybe.toMillis as () => number)();
+  return Number.isSafeInteger(result) ? result : null;
+}
+
 export const getSharingDashboard = onCall(
   strictCallableOptions,
   async (request) => {
@@ -68,14 +78,19 @@ export const getSharingDashboard = onCall(
     ]);
 
     const owner = ownerSnapshot.data() as Record<string, unknown> | undefined;
+    const nowMs = Date.now();
     const audience = summarizeSharingGrants(
       grantsSnapshot.docs.map((grant) => {
         const data = grant.data() as Record<string, unknown>;
         return {
           relationship: data.relationship,
+          ownerApproved: data.ownerApproved,
+          viewerApproved: data.viewerApproved,
           selectedByOwner: data.selectedByOwner,
+          expiresAtMs: timestampMillis(data.expiresAt),
         };
       }),
+      nowMs,
     );
 
     const sessionId = activeSessionId(owner?.activeShareSessionId);
