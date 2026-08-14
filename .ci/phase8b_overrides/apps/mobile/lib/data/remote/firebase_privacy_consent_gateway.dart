@@ -18,22 +18,27 @@ final class FirebasePrivacyConsentGateway {
   }
 
   Future<void> setPrivacyMode(VisibilityMode mode) async {
-    await _criticalCallable('setPrivacyMode').call(<String, Object?>{
-      'visibilityMode': _visibilityName(mode),
-    });
+    await _criticalCallable('setPrivacyMode').call<Map<String, dynamic>>(
+      <String, Object?>{
+        'visibilityMode': _visibilityName(mode),
+      },
+    );
   }
 
   Future<void> requestSharing(String viewerUserId) async {
-    await _criticalCallable('requestLocationSharing').call(<String, Object?>{
-      'viewerUserId': viewerUserId,
-    });
+    await _criticalCallable('requestLocationSharing').call<Map<String, dynamic>>(
+      <String, Object?>{
+        'viewerUserId': viewerUserId,
+      },
+    );
   }
 
   Future<void> respondToSharing({
     required String ownerUserId,
     required bool approved,
   }) async {
-    await _criticalCallable('respondToLocationSharing').call(<String, Object?>{
+    await _criticalCallable('respondToLocationSharing')
+        .call<Map<String, dynamic>>(<String, Object?>{
       'ownerUserId': ownerUserId,
       'approved': approved,
     });
@@ -43,7 +48,8 @@ final class FirebasePrivacyConsentGateway {
     required String ownerUserId,
     required String viewerUserId,
   }) async {
-    await _criticalCallable('revokeLocationSharing').call(<String, Object?>{
+    await _criticalCallable('revokeLocationSharing')
+        .call<Map<String, dynamic>>(<String, Object?>{
       'ownerUserId': ownerUserId,
       'viewerUserId': viewerUserId,
     });
@@ -53,16 +59,19 @@ final class FirebasePrivacyConsentGateway {
     required String viewerUserId,
     required bool selected,
   }) async {
-    await _criticalCallable('setSelectedViewer').call(<String, Object?>{
+    await _criticalCallable('setSelectedViewer')
+        .call<Map<String, dynamic>>(<String, Object?>{
       'viewerUserId': viewerUserId,
       'selected': selected,
     });
   }
 
   Future<void> blockUser(String viewerUserId) async {
-    await _criticalCallable('blockUser').call(<String, Object?>{
-      'viewerUserId': viewerUserId,
-    });
+    await _criticalCallable('blockUser').call<Map<String, dynamic>>(
+      <String, Object?>{
+        'viewerUserId': viewerUserId,
+      },
+    );
   }
 
   String _visibilityName(VisibilityMode mode) {
