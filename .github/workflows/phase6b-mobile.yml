@@ -10,7 +10,7 @@ permissions:
 
 concurrency:
   group: phase6b-mobile-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   FLUTTER_VERSION: "3.47.0"
@@ -58,15 +58,25 @@ jobs:
           java -version
           echo "ANDROID_HOME=${ANDROID_HOME:-}"
           echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
-          command -v adb || true
-          command -v sdkmanager || true
           flutter doctor -v
 
-      - name: Bootstrap Flutter source and run Dart checks/tests
+      - name: Generate platforms and apply native overlays
         shell: bash
         run: |
-          cd ci_payload
-          APP_ORG=com.dC0dez ./tools/bootstrap_flutter.sh
+          cd ci_payload/apps/mobile
+          flutter create --platforms=android,ios --project-name nearby_contacts --org com.dC0dez .
+          cd ../..
+          python3 tools/apply_native_overlays.py
+
+      - name: Resolve dependencies, normalize formatting, analyze and test
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          flutter pub get
+          dart format lib test integration_test
+          dart format --output=none --set-exit-if-changed lib test integration_test
+          flutter analyze
+          flutter test
 
       - name: Run backend privacy/location regression
         shell: bash
@@ -85,7 +95,7 @@ jobs:
           flutter build apk --debug --flavor staging --dart-define=APP_ENV=staging
           flutter build apk --debug --flavor production --dart-define=APP_ENV=production
 
-      - name: Confirm exact Android application IDs in Gradle source
+      - name: Confirm exact Android application IDs and no background location
         shell: bash
         run: |
           cd ci_payload/apps/mobile
@@ -137,11 +147,23 @@ jobs:
           swiftc --version
           flutter doctor -v
 
-      - name: Bootstrap Flutter source and run Dart checks/tests
+      - name: Generate platforms and apply native overlays
         shell: bash
         run: |
-          cd ci_payload
-          APP_ORG=com.dC0dez ./tools/bootstrap_flutter.sh
+          cd ci_payload/apps/mobile
+          flutter create --platforms=android,ios --project-name nearby_contacts --org com.dC0dez .
+          cd ../..
+          python3 tools/apply_native_overlays.py
+
+      - name: Resolve dependencies, normalize formatting, analyze and test
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          flutter pub get
+          dart format lib test integration_test
+          dart format --output=none --set-exit-if-changed lib test integration_test
+          flutter analyze
+          flutter test
 
       - name: Parse native Swift bridge
         shell: bash
