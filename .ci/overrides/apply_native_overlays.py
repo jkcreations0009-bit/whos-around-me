@@ -76,6 +76,12 @@ def patch_android() -> None:
     if not gradle_kts.exists():
         die("Current Phase 6B overlay supports the Flutter Kotlin-DSL Android template only.")
     gradle = gradle_kts.read_text()
+    generated_compile_sdk = "compileSdk = flutter.compileSdkVersion"
+    if generated_compile_sdk in gradle:
+        gradle = gradle.replace(generated_compile_sdk, "compileSdk = 37", 1)
+    elif "compileSdk = 37" not in gradle:
+        die("Could not pin Android compileSdk 37 for Android 17 Contacts Picker APIs.")
+
     marker = "// WHOS_AROUND_ME_ENV_FLAVORS"
     if marker not in gradle:
         flavor_block = f'''\n    {marker}\n    buildFeatures {{\n        resValues = true\n    }}\n    flavorDimensions += "environment"\n    productFlavors {{\n        create("development") {{\n            dimension = "environment"\n            applicationId = "{IDS['development']}"\n            resValue("string", "app_name", "{android_resource_value(DISPLAY['development'])}")\n        }}\n        create("qa") {{\n            dimension = "environment"\n            applicationId = "{IDS['test']}"\n            resValue("string", "app_name", "{android_resource_value(DISPLAY['test'])}")\n        }}\n        create("staging") {{\n            dimension = "environment"\n            applicationId = "{IDS['staging']}"\n            resValue("string", "app_name", "{android_resource_value(DISPLAY['staging'])}")\n        }}\n        create("production") {{\n            dimension = "environment"\n            applicationId = "{IDS['production']}"\n            resValue("string", "app_name", "{android_resource_value(DISPLAY['production'])}")\n        }}\n    }}\n'''
@@ -147,7 +153,7 @@ def main() -> None:
     patch_android()
     patch_ios()
     print("Applied Who's Around Me Phase 6B Android/iOS native overlays.")
-    print("Android: four product flavors configured; foreground contacts/location bridge installed.")
+    print("Android: compileSdk 37 + four product flavors configured; foreground contacts/location bridge installed.")
     print("iOS: production bundle identifier + foreground bridge installed; multi-scheme flavor mapping remains a macOS/Xcode gate.")
 
 
