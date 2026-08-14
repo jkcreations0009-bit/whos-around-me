@@ -64,6 +64,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Selected: 1'), findsOneWidget);
 
+    await tester.drag(find.byType(ListView), const Offset(0, -650));
+    await tester.pumpAndSettle();
+    expect(find.text('Share my current location'), findsOneWidget);
+
     await tester.tap(find.text('Share my current location'));
     await tester.pumpAndSettle();
     expect(sharing.startCalls, 1);
@@ -78,11 +82,13 @@ void main() {
       reason: 'Phase 8D must not contain a hidden periodic publisher.',
     );
 
+    expect(find.text('Update shared location'), findsOneWidget);
     await tester.tap(find.text('Update shared location'));
     await tester.pumpAndSettle();
     expect(sharing.publishCalls, 2);
     expect(location.refreshCalls, 2);
 
+    expect(find.text('Stop sharing'), findsOneWidget);
     await tester.tap(find.text('Stop sharing'));
     await tester.pumpAndSettle();
     expect(sharing.stopCalls, 1);
