@@ -36,6 +36,9 @@ req('liveSharingEnabled: false' in callables and 'activeShareSessionId: null' in
     'stop sharing invalidates the active session')
 req('transaction.delete(liveLocationRef)' in callables,
     'session start/stop removes stale retained coordinate state')
+req('sessionSnapshot.data()?.lastAcceptedAtMs' in callables
+    and 'transaction.set(\n        sessionRef,\n        { lastAcceptedAtMs: nowMs }' in callables,
+    'publish throttle is anchored to server-only session state rather than deletable location state')
 
 req('candidate.sessionId !== session.sessionId' in protocol,
     'publication requires exact active share-session match')
