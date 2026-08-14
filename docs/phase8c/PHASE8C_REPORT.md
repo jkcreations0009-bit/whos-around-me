@@ -2,9 +2,15 @@
 
 ## Status
 
-IMPLEMENTED — FINAL HOSTED CI VERIFICATION IN PROGRESS
+**PASS — HOSTED CI / EMULATOR / NATIVE BUILD VERIFIED**
 
-Phase 8C is the first slice in which live coordinates may exist remotely. The transport is intentionally dormant in the Nearby UI until the protocol and native build gates are green.
+Verified GitHub Actions run: `31806663979`
+
+Verified branch head: `33bdb2efbd9556cb17383f49d675840a6a39189e`
+
+Merged to `main`: `eb93b6935a92c63964fbd2933696b2e41792c715`
+
+Phase 8C is the first slice in which live coordinates may exist remotely. The transport remains intentionally dormant in the Nearby UI; no silent location sharing was introduced.
 
 ## Security objective
 
@@ -41,7 +47,7 @@ A coordinate may be accepted or returned only through an App-Check-protected cal
 - capture no more than 30 seconds in the future.
 - minimum 5-second publication interval.
 
-The publication throttle is persisted on the server-only share-session record, so an owner emergency-delete of the location document cannot reset the throttle.
+The publication throttle is persisted on the server-only share-session record, so owner emergency deletion of the live-location document cannot reset the throttle.
 
 ### Viewer read
 
@@ -69,7 +75,7 @@ No denial reason, prior coordinate, distance, timestamp or approximate position 
 
 ## Hidden / revoke / block behavior
 
-Privacy invalidation now:
+Privacy invalidation:
 
 1. disables live sharing;
 2. clears `activeShareSessionId`;
@@ -77,7 +83,7 @@ Privacy invalidation now:
 4. marks the prior share session inactive; and
 5. deletes the retained `liveLocations/{owner}` document.
 
-An upload carrying the old session or epoch is therefore rejected after invalidation commits.
+An upload carrying the old session or epoch is rejected after invalidation commits.
 
 ## Firestore client boundary
 
@@ -89,7 +95,7 @@ Privacy, consent and share-session writes remain server-authoritative.
 
 ## Automated regressions
 
-Implemented tests cover:
+Executed coverage includes:
 
 - valid publish.
 - old session rejection.
@@ -111,26 +117,31 @@ Implemented tests cover:
 - Firestore emulator denial of all direct coordinate reads/writes.
 - owner emergency delete only.
 
-## Evidence semantics
+## Executed verification
 
-The pure protocol two-user test is automated and executable, but it is **not** a claim that a real two-device Firebase/App Check flow has been executed.
+GitHub Actions run `31806663979` completed successfully on all three jobs:
 
-### Currently verified
+- Phase 8C Protocol + Backend + Firestore Emulator — **PASS**.
+- TypeScript production compile + protocol/race tests — **PASS**.
+- Firestore Security Rules emulator — **PASS**.
+- server-only coordinate boundary proof — **PASS**.
+- Phase 8C Flutter + Android — **PASS**.
+- Flutter analyze/tests — **PASS**.
+- development/test/staging/production Android APK builds — **PASS**.
+- exact Android application ID and privacy checks — **PASS**.
+- Phase 8C Flutter + macOS/Xcode — **PASS**.
+- Flutter tests and native Swift parse — **PASS**.
+- iOS production simulator build and privacy/bundle-ID verification — **PASS**.
 
-- Phase 8C structural verifier: executed on hosted CI; latest final-head rerun pending.
-- TypeScript production callable compilation: previously reached successfully before test-harness correction; final-head rerun pending.
-- Phase 8C protocol tests: final-head rerun pending.
-- Firestore emulator rules: final-head rerun pending.
-- Android Flutter/native build: final-head rerun pending.
-- iOS Flutter/native simulator build: final-head rerun pending.
+## Evidence boundary — not executed yet
 
-### Not executed yet
+The automated two-user policy test is **not** a claim that a real two-device Firebase/App Check flow has been executed. The following remain **NOT EXECUTED**:
 
 - deployment to an actual Firebase development project.
 - real Authentication-provider sign-in.
 - real Play Integrity attestation.
 - real App Attest/DeviceCheck attestation.
-- actual Cloud Functions deployment/invocation.
+- actual deployed Cloud Functions invocation.
 - two physical users/devices performing A-share/B-read/A-hide/B-denied.
 - network interruption/offline recovery behavior.
 - device clock manipulation behavior.
@@ -138,4 +149,4 @@ The pure protocol two-user test is automated and executable, but it is **not** a
 
 ## Release interpretation
 
-Phase 8C may be merged after all hosted CI gates are green. That will establish a verified protocol implementation, not production release readiness. Live-sharing UI activation remains deferred to a later slice after this protocol is closed.
+Phase 8C is closed for CI/emulator/native-build verification and has been merged. It is **not production-release ready** until the real Firebase, App Check and physical-device gates are executed. Live-sharing UX may now be implemented in a separate phase with explicit user action and fail-closed runtime behavior.
