@@ -1,6 +1,9 @@
 export interface SharingGrantSummaryInput {
   readonly relationship: unknown;
+  readonly ownerApproved: unknown;
+  readonly viewerApproved: unknown;
   readonly selectedByOwner: unknown;
+  readonly expiresAtMs: number | null;
 }
 
 export interface SharingAudienceSummary {
@@ -10,8 +13,19 @@ export interface SharingAudienceSummary {
   readonly blockedViewerCount: number;
 }
 
+export function isActiveAuthorizedGrant(
+  grant: SharingGrantSummaryInput,
+  nowMs: number,
+): boolean {
+  return grant.relationship === "AUTHORIZED"
+    && grant.ownerApproved === true
+    && grant.viewerApproved === true
+    && (grant.expiresAtMs === null || grant.expiresAtMs > nowMs);
+}
+
 export function summarizeSharingGrants(
   grants: readonly SharingGrantSummaryInput[],
+  nowMs: number,
 ): SharingAudienceSummary {
   let authorizedViewerCount = 0;
   let selectedAuthorizedViewerCount = 0;
@@ -19,7 +33,7 @@ export function summarizeSharingGrants(
   let blockedViewerCount = 0;
 
   for (const grant of grants) {
-    if (grant.relationship === "AUTHORIZED") {
+    if (isActiveAuthorizedGrant(grant, nowMs)) {
       authorizedViewerCount += 1;
       if (grant.selectedByOwner === true) selectedAuthorizedViewerCount += 1;
     } else if (grant.relationship === "PENDING") {
