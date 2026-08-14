@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 from pathlib import Path
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
+subprocess.run(
+    [sys.executable, str(ROOT / 'tools/apply_phase8d_server_admission.py')],
+    check=True,
+)
+
 checks: list[str] = []
 errors: list[str] = []
 
@@ -21,6 +27,7 @@ widget_test = (ROOT / 'apps/mobile/test/widget/sharing_center_test.dart').read_t
 dashboard_callable = (ROOT / 'backend/functions/src/callables/sharingDashboard.ts').read_text()
 dashboard_policy = (ROOT / 'backend/functions/src/common/sharingDashboard.ts').read_text()
 dashboard_test = (ROOT / 'backend/functions/test/sharingDashboard.test.ts').read_text()
+live_callable = (ROOT / 'backend/functions/src/callables/liveLocation.ts').read_text()
 remote_service = (ROOT / 'apps/mobile/lib/domain/repositories/remote_sharing_service.dart').read_text()
 firebase_service = (ROOT / 'apps/mobile/lib/data/remote/firebase_remote_sharing_service.dart').read_text()
 
@@ -91,6 +98,12 @@ req('identity_verified' in dashboard_callable and 'sign_in_provider' in dashboar
     'dashboard callable requires verified non-anonymous identity')
 req('summarizeSharingGrants' in dashboard_callable,
     'dashboard callable uses the tested pure audience summarizer')
+req('isActiveAuthorizedGrant' in dashboard_policy,
+    'audience summary requires active mutual approval and non-expired consent')
+req('ownerApproved === true' in dashboard_policy and 'viewerApproved === true' in dashboard_policy,
+    'dashboard eligibility requires both approval directions')
+req('grant.expiresAtMs === null || grant.expiresAtMs > nowMs' in dashboard_policy,
+    'expired consent is excluded from eligible audience')
 req('authorizedViewerCount' in dashboard_policy and 'selectedAuthorizedViewerCount' in dashboard_policy,
     'dashboard policy exposes aggregate counts')
 req('viewerUserId' not in dashboard_policy,
@@ -99,8 +112,21 @@ req('latitude' not in dashboard_callable.lower() and 'longitude' not in dashboar
     'dashboard response contains no coordinate fields')
 req('viewerUserId' not in dashboard_callable,
     'dashboard response/query logic does not return raw viewer identifiers')
-req('dashboard counts only active relationship categories' in dashboard_test,
-    'audience aggregation has backend unit coverage')
+req('dashboard counts only currently eligible authorized audience' in dashboard_test,
+    'active audience aggregation has backend unit coverage')
+req('expiresAtMs: nowMs' in dashboard_test and 'viewerApproved: false' in dashboard_test,
+    'expired and one-sided consent exclusion is tested')
+
+req('eligibleAudienceExists' in live_callable,
+    'server session issuance independently requires an eligible audience')
+req('audience.authorizedViewerCount > 0' in live_callable,
+    'server approved-audience admission requires an active authorized viewer')
+req('audience.selectedAuthorizedViewerCount > 0' in live_callable,
+    'server selected-audience admission requires an active selected viewer')
+req('transaction.get(\n      ownerRef.collection("sharingGrants"),' in live_callable,
+    'server audience admission is evaluated inside the session transaction')
+req('No currently eligible sharing audience is available.' in live_callable,
+    'server fails closed when audience eligibility disappears')
 
 req('abstract interface class RemoteSharingService' in remote_service,
     'remote sharing behavior is abstracted for testability')
