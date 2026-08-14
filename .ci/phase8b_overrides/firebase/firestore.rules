@@ -1,0 +1,40 @@
+// Phase 8B: Firebase Auth + persisted privacy/consent are enabled, but all
+// client live-coordinate publication remains explicitly locked.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      // Privacy state is mutated only by App-Check-protected callable functions.
+      allow create, update, delete: if false;
+
+      match /sharingGrants/{viewerUid} {
+        allow read: if isOwner(uid)
+          || (signedIn() && request.auth.uid == viewerUid);
+        // Consent/relationship writes remain server-authoritative.
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /liveLocations/{uid} {
+      // Critical Phase 8B invariant: not a single client can publish coordinates.
+      allow create, update: if false;
+      // Owner deletion remains an emergency privacy control.
+      allow delete: if isOwner(uid);
+      // Remote viewer reads are intentionally not enabled yet.
+      allow read: if isOwner(uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
