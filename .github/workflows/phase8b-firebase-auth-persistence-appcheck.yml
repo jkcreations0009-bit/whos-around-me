@@ -1,0 +1,277 @@
+name: Phase 8B Firebase Auth Persistence App Check Verification
+
+on:
+  push:
+    branches: [phase8b-firebase-auth-persistence-appcheck]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase8b-firebase-auth-persistence-appcheck-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.0"
+  PAYLOAD_SHA256: "dedde098d74b003ab837e567c36bf09bd2d38d8862d14fac6a6ec3f380ee7544"
+
+jobs:
+  policy_backend:
+    name: Phase 8B Policy + Backend + Firestore Emulator
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout verification repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Reconstruct baseline and apply Phase 7 + Phase 8A + Phase 8B
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, tarfile
+          parts = sorted(pathlib.Path('.ci/payload').glob('part*.b64'))
+          assert len(parts) == 3, f"expected 3 payload parts, found {len(parts)}"
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          expected = '${{ env.PAYLOAD_SHA256 }}'
+          actual = hashlib.sha256(archive).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'payload checksum mismatch: {actual} != {expected}')
+          pathlib.Path('phase6b.tar.xz').write_bytes(archive)
+          with tarfile.open('phase6b.tar.xz', 'r:xz') as tf:
+              tf.extractall('.')
+          print(f'Payload verified: {actual}')
+          PY
+          cp .ci/overrides/nearby_local_screen.dart ci_payload/apps/mobile/lib/features/nearby/nearby_local_screen.dart
+          cp .ci/overrides/widget_test.dart ci_payload/apps/mobile/test/widget_test.dart
+          cp .ci/overrides/apply_native_overlays.py ci_payload/tools/apply_native_overlays.py
+          cp -R .ci/phase7_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase7.py
+          cp -R .ci/phase8_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8a.py
+          cp -R .ci/phase8b_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8b.py
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          package-manager-cache: false
+
+      - name: Compile and execute backend privacy/consent regressions
+        shell: bash
+        run: |
+          cd ci_payload/backend/functions
+          node --version
+          npm --version
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run build
+          npm run test:core
+
+      - name: Set up Java 21 for Firestore emulator
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Execute Firestore Security Rules emulator tests
+        shell: bash
+        run: |
+          java -version
+          cd ci_payload/firebase/test
+          npm install --ignore-scripts --no-audit --no-fund
+          cd ../..
+          npx --yes firebase-tools@15.27.0 emulators:exec \
+            --project demo-whos-around-me \
+            --only firestore \
+            --config firebase.json \
+            "cd firebase/test && npm test"
+
+      - name: Prove Phase 8B live-coordinate publication remains locked
+        shell: bash
+        run: |
+          grep -F 'allow create, update: if false;' ci_payload/firebase/firestore.rules
+          grep -F 'liveSharingEnabled: false' ci_payload/backend/functions/src/callables/privacyConsent.ts
+          grep -F 'activeShareSessionId: null' ci_payload/backend/functions/src/callables/privacyConsent.ts
+          ! grep -R -E 'latitude|longitude' ci_payload/backend/functions/src/callables/privacyConsent.ts
+
+  android:
+    name: Phase 8B Flutter + Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout verification repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Reconstruct baseline and apply Phase 7 + Phase 8A + Phase 8B
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, tarfile
+          parts = sorted(pathlib.Path('.ci/payload').glob('part*.b64'))
+          assert len(parts) == 3, f"expected 3 payload parts, found {len(parts)}"
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          expected = '${{ env.PAYLOAD_SHA256 }}'
+          actual = hashlib.sha256(archive).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'payload checksum mismatch: {actual} != {expected}')
+          pathlib.Path('phase6b.tar.xz').write_bytes(archive)
+          with tarfile.open('phase6b.tar.xz', 'r:xz') as tf:
+              tf.extractall('.')
+          print(f'Payload verified: {actual}')
+          PY
+          cp .ci/overrides/nearby_local_screen.dart ci_payload/apps/mobile/lib/features/nearby/nearby_local_screen.dart
+          cp .ci/overrides/widget_test.dart ci_payload/apps/mobile/test/widget_test.dart
+          cp .ci/overrides/apply_native_overlays.py ci_payload/tools/apply_native_overlays.py
+          cp -R .ci/phase7_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase7.py
+          cp -R .ci/phase8_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8a.py
+          cp -R .ci/phase8b_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8b.py
+
+      - name: Install official Flutter stable tag
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Verify Android runner toolchain
+        shell: bash
+        run: |
+          flutter --version
+          dart --version
+          java -version
+          echo "ANDROID_HOME=${ANDROID_HOME:-}"
+          echo "ANDROID_SDK_ROOT=${ANDROID_SDK_ROOT:-}"
+          flutter doctor -v
+
+      - name: Generate platforms and apply native overlays
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          flutter create --platforms=android,ios --project-name nearby_contacts --org com.dC0dez .
+          cd ../..
+          python3 tools/apply_native_overlays.py
+
+      - name: Analyze and execute Flutter tests with Firebase disabled by missing runtime config
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          flutter pub get
+          dart format lib test integration_test
+          dart format --output=none --set-exit-if-changed lib test integration_test
+          flutter analyze
+          flutter test
+
+      - name: Build all Android environment flavors without Firebase secrets
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          yes | flutter doctor --android-licenses >/dev/null 2>&1 || true
+          flutter build apk --debug --flavor development --dart-define=APP_ENV=development
+          flutter build apk --debug --flavor qa --dart-define=APP_ENV=test
+          flutter build apk --debug --flavor staging --dart-define=APP_ENV=staging
+          flutter build apk --debug --flavor production --dart-define=APP_ENV=production
+
+      - name: Verify exact Android identifiers and privacy boundary
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          grep -F 'applicationId = "com.dC0dez.Whosaroundme.dev"' android/app/build.gradle.kts
+          grep -F 'applicationId = "com.dC0dez.Whosaroundme.test"' android/app/build.gradle.kts
+          grep -F 'applicationId = "com.dC0dez.Whosaroundme.staging"' android/app/build.gradle.kts
+          grep -F 'applicationId = "com.dC0dez.Whosaroundme"' android/app/build.gradle.kts
+          ! grep -R 'ACCESS_BACKGROUND_LOCATION' android/app/src/main/AndroidManifest.xml
+
+  ios:
+    name: Phase 8B Flutter + macOS/Xcode
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout verification repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Reconstruct baseline and apply Phase 7 + Phase 8A + Phase 8B
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, tarfile
+          parts = sorted(pathlib.Path('.ci/payload').glob('part*.b64'))
+          assert len(parts) == 3, f"expected 3 payload parts, found {len(parts)}"
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          expected = '${{ env.PAYLOAD_SHA256 }}'
+          actual = hashlib.sha256(archive).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'payload checksum mismatch: {actual} != {expected}')
+          pathlib.Path('phase6b.tar.xz').write_bytes(archive)
+          with tarfile.open('phase6b.tar.xz', 'r:xz') as tf:
+              tf.extractall('.')
+          print(f'Payload verified: {actual}')
+          PY
+          cp .ci/overrides/nearby_local_screen.dart ci_payload/apps/mobile/lib/features/nearby/nearby_local_screen.dart
+          cp .ci/overrides/widget_test.dart ci_payload/apps/mobile/test/widget_test.dart
+          cp .ci/overrides/apply_native_overlays.py ci_payload/tools/apply_native_overlays.py
+          cp -R .ci/phase7_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase7.py
+          cp -R .ci/phase8_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8a.py
+          cp -R .ci/phase8b_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8b.py
+
+      - name: Install official Flutter stable tag
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Verify macOS/Xcode toolchain
+        shell: bash
+        run: |
+          flutter --version
+          dart --version
+          xcodebuild -version
+          swiftc --version
+          flutter doctor -v
+
+      - name: Generate platforms and apply native overlays
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          flutter create --platforms=android,ios --project-name nearby_contacts --org com.dC0dez .
+          cd ../..
+          python3 tools/apply_native_overlays.py
+
+      - name: Analyze and execute Flutter tests with Firebase disabled by missing runtime config
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          flutter pub get
+          dart format lib test integration_test
+          dart format --output=none --set-exit-if-changed lib test integration_test
+          flutter analyze
+          flutter test
+
+      - name: Parse native Swift bridge
+        shell: bash
+        run: |
+          swiftc -frontend -parse ci_payload/native_overlays/ios/AppDelegate.swift
+
+      - name: Build iOS production simulator app without Firebase secrets
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          flutter build ios --simulator --no-codesign --dart-define=APP_ENV=production
+
+      - name: Verify iOS privacy configuration and bundle ID
+        shell: bash
+        run: |
+          cd ci_payload/apps/mobile
+          /usr/libexec/PlistBuddy -c 'Print :NSContactsUsageDescription' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' ios/Runner/Info.plist
+          if /usr/libexec/PlistBuddy -c 'Print :NSLocationAlwaysUsageDescription' ios/Runner/Info.plist >/dev/null 2>&1; then exit 1; fi
+          if /usr/libexec/PlistBuddy -c 'Print :NSLocationAlwaysAndWhenInUseUsageDescription' ios/Runner/Info.plist >/dev/null 2>&1; then exit 1; fi
+          grep -F 'PRODUCT_BUNDLE_IDENTIFIER = com.dC0dez.Whosaroundme;' ios/Runner.xcodeproj/project.pbxproj
