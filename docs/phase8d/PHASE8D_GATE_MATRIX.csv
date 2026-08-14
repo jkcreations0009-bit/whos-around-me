@@ -1,0 +1,26 @@
+Gate,Requirement,Status,Evidence
+P8D-01,Sharing destination added while Nearby remains default,PASS,GitHub Actions 31810000204 Flutter/widget tests
+P8D-02,Missing Firebase config fails closed to local-only,PASS,GitHub Actions 31810000204 widget regression
+P8D-03,Verified non-anonymous identity required for sharing,PASS,GitHub Actions 31810000204 structural/backend/Flutter tests
+P8D-04,Sharing dashboard enforces App Check and replay protection,PASS,GitHub Actions 31810000204 backend/security verifier
+P8D-05,Dashboard returns aggregates only with no viewer IDs or coordinates,PASS,GitHub Actions 31810000204 backend/security verifier
+P8D-06,Audience eligibility requires mutual approval and non-expired consent,PASS,GitHub Actions 31810000204 backend tests
+P8D-07,Client share-start policy requires eligible audience,PASS,GitHub Actions 31810000204 Flutter unit tests
+P8D-08,Server share-session admission independently requires eligible audience,PASS,GitHub Actions 31810000204 TypeScript compile/security verifier
+P8D-09,One-tap Hidden control,PASS,GitHub Actions 31810000204 structural/Flutter tests
+P8D-10,Share current location requires explicit foreground action,PASS,GitHub Actions 31810000204 widget tests
+P8D-11,Shared-location update requires explicit action,PASS,GitHub Actions 31810000204 widget tests
+P8D-12,No hidden periodic publisher or location stream,PASS,GitHub Actions 31810000204 virtual-time/structural tests
+P8D-13,No Android background-location permission,PASS,GitHub Actions 31810000204 Android final privacy check
+P8D-14,No address-book upload introduced,PASS,GitHub Actions 31810000204 structural boundary check
+P8D-15,Backend compile and regressions,PASS,GitHub Actions 31810000204
+P8D-16,Firestore emulator security regression,PASS,GitHub Actions 31810000204
+P8D-17,Flutter analyze/unit/widget tests,PASS,GitHub Actions 31810000204
+P8D-18,Android development/test/staging/production builds,PASS,GitHub Actions 31810000204
+P8D-19,iOS production simulator/native privacy verification,PASS,GitHub Actions 31810000204
+P8D-20,Actual Firebase development deployment,NOT EXECUTED,Requires configured Firebase development project
+P8D-21,Real Auth provider and identity_verified claim flow,NOT EXECUTED,Requires configured Firebase project
+P8D-22,Real Play Integrity/App Attest verification,NOT EXECUTED,Requires physical configured devices
+P8D-23,Physical two-user A-share/B-read/A-hide/B-denied,NOT EXECUTED,Requires deployed backend and two physical devices
+P8D-24,Real permission/network/GPS/accessibility validation,NOT EXECUTED,Requires real-device execution
+P8D-25,Production readiness,NO,Real Firebase and physical-device gates remain
