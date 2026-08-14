@@ -33,8 +33,8 @@ def die(message: str) -> None:
 
 
 def android_resource_value(value: str) -> str:
-    # Preserve one backslash through Kotlin so Android's resource parser
-    # receives the required escaped apostrophe.
+    # Gradle/Kotlin must preserve one backslash for Android's string-resource
+    # parser, which requires apostrophes to be escaped.
     return value.replace("'", chr(92) * 2 + "'")
 
 
