@@ -73,7 +73,7 @@ final class FirebaseLiveLocationGateway {
     }
     return <String, Object?>{
       for (final MapEntry<Object?, Object?> entry in value.entries)
-        if (entry.key is String) entry.key! as String: entry.value,
+        if (entry.key is String) entry.key as String: entry.value,
     };
   }
 
