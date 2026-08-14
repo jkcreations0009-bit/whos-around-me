@@ -1,0 +1,46 @@
+// Phase 8C: live coordinates may exist remotely, but clients never read or
+// write them directly. All publication and viewer access is mediated by
+// App-Check-protected callable functions that re-check consent/session state.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid);
+      // Privacy state remains server-authoritative.
+      allow create, update, delete: if false;
+
+      match /sharingGrants/{viewerUid} {
+        allow read: if isOwner(uid)
+          || (signedIn() && request.auth.uid == viewerUid);
+        // Consent/relationship writes remain server-authoritative.
+        allow create, update, delete: if false;
+      }
+
+      match /shareSessions/{sessionId} {
+        // Owner may inspect session metadata, but cannot mutate it directly.
+        allow read: if isOwner(uid);
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /liveLocations/{uid} {
+      // Critical Phase 8C invariant: no client can publish or fetch coordinates
+      // directly. Firebase Admin callables are the only remote data path.
+      allow read, create, update: if false;
+      // Owner retains a direct emergency-delete privacy control.
+      allow delete: if isOwner(uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
