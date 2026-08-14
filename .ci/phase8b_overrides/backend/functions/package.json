@@ -1,0 +1,21 @@
+{
+  "name": "nearby-contacts-functions",
+  "private": true,
+  "engines": {
+    "node": "22"
+  },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test:core": "npm run build:core && node --test build-core/test/**/*.test.js",
+    "build:core": "tsc -p tsconfig.core.json",
+    "test:all": "npm run test:core"
+  },
+  "dependencies": {
+    "firebase-admin": "14.2.0",
+    "firebase-functions": "7.3.2"
+  },
+  "devDependencies": {
+    "typescript": "5.8.3"
+  }
+}
