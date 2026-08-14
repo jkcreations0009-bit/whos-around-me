@@ -14,7 +14,7 @@ Future<void> main() async {
       await FirebaseBootstrap.initialize(environment: environment);
   runApp(
     ProviderScope(
-      overrides: <Override>[
+      overrides: [
         firebaseBootstrapStateProvider.overrideWithValue(firebaseState),
       ],
       child: const WhosAroundMeApp(),
