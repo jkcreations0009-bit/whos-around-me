@@ -277,6 +277,7 @@ export const startLiveSharing = onCall(strictCallableOptions, async (request) =>
       createdAt: FieldValue.serverTimestamp(),
       createdAtMs: nowMs,
       expiresAtMs,
+      lastAcceptedAtMs: null,
     });
     transaction.set(
       ownerRef,
@@ -362,7 +363,6 @@ export const publishLiveLocation = onCall(
     await db.runTransaction(async (transaction) => {
       const ownerSnapshot = await transaction.get(ownerRef);
       const sessionSnapshot = await transaction.get(sessionRef);
-      const locationSnapshot = await transaction.get(liveLocationRef);
       const currentSharing = sharingState(
         ownerSnapshot.data() as Record<string, unknown> | undefined,
       );
@@ -376,7 +376,9 @@ export const publishLiveLocation = onCall(
           "Live sharing session is not active.",
         );
       }
-      const previousAcceptedAtMs = timestampMillis(locationSnapshot.data()?.acceptedAtMs);
+      const previousAcceptedAtMs = timestampMillis(
+        sessionSnapshot.data()?.lastAcceptedAtMs,
+      );
       const decision = publicationDecision(
         ownerUserId,
         currentSharing,
@@ -387,6 +389,11 @@ export const publishLiveLocation = onCall(
       );
       if (!decision.allowed) throwPublicationDenied(decision.reason);
 
+      transaction.set(
+        sessionRef,
+        { lastAcceptedAtMs: nowMs },
+        { merge: true },
+      );
       transaction.set(liveLocationRef, {
         ownerUserId,
         sessionId: candidate.sessionId,
