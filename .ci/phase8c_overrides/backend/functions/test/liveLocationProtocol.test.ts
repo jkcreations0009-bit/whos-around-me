@@ -1,19 +1,31 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { test } from "node:test";
 
 import type {
   ConsentRecord,
   RemoteSharingState,
 } from "../src/common/authPrivacyConsent";
-import {
+import type {
   LocationCandidate,
+  ProtocolDecision,
   ShareSessionState,
   StoredLiveLocation,
+} from "../src/common/liveLocationProtocol";
+import {
   publicationDecision,
   viewerReadDecision,
 } from "../src/common/liveLocationProtocol";
 
 const nowMs = 1_800_000_000_000;
+
+function expectDecision(
+  actual: ProtocolDecision,
+  allowed: boolean,
+  reason?: string,
+): void {
+  assert.equal(actual.allowed, allowed);
+  if (!actual.allowed) assert.equal(actual.reason, reason);
+}
 
 function sharing(overrides: Partial<RemoteSharingState> = {}): RemoteSharingState {
   return {
@@ -74,14 +86,14 @@ function location(overrides: Partial<StoredLiveLocation> = {}): StoredLiveLocati
 }
 
 test("valid current session can publish a fresh coordinate", () => {
-  assert.deepEqual(
+  expectDecision(
     publicationDecision("owner", sharing(), session(), candidate(), null, nowMs),
-    { allowed: true },
+    true,
   );
 });
 
 test("publication rejects old session and old privacy epoch", () => {
-  assert.equal(
+  expectDecision(
     publicationDecision(
       "owner",
       sharing(),
@@ -89,10 +101,11 @@ test("publication rejects old session and old privacy epoch", () => {
       candidate({ sessionId: "old-session-abcdefghijklmnop" }),
       null,
       nowMs,
-    ).allowed,
+    ),
     false,
+    "SESSION_MISMATCH",
   );
-  assert.equal(
+  expectDecision(
     publicationDecision(
       "owner",
       sharing(),
@@ -100,13 +113,14 @@ test("publication rejects old session and old privacy epoch", () => {
       candidate({ privacyEpoch: 6 }),
       null,
       nowMs,
-    ).allowed,
+    ),
     false,
+    "PRIVACY_EPOCH_MISMATCH",
   );
 });
 
 test("publication rejects impossible coordinates and poor accuracy", () => {
-  assert.deepEqual(
+  expectDecision(
     publicationDecision(
       "owner",
       sharing(),
@@ -115,9 +129,10 @@ test("publication rejects impossible coordinates and poor accuracy", () => {
       null,
       nowMs,
     ),
-    { allowed: false, reason: "INVALID_COORDINATE" },
+    false,
+    "INVALID_COORDINATE",
   );
-  assert.deepEqual(
+  expectDecision(
     publicationDecision(
       "owner",
       sharing(),
@@ -126,9 +141,10 @@ test("publication rejects impossible coordinates and poor accuracy", () => {
       null,
       nowMs,
     ),
-    { allowed: false, reason: "INVALID_COORDINATE" },
+    false,
+    "INVALID_COORDINATE",
   );
-  assert.deepEqual(
+  expectDecision(
     publicationDecision(
       "owner",
       sharing(),
@@ -137,12 +153,13 @@ test("publication rejects impossible coordinates and poor accuracy", () => {
       null,
       nowMs,
     ),
-    { allowed: false, reason: "INVALID_ACCURACY" },
+    false,
+    "INVALID_ACCURACY",
   );
 });
 
 test("publication rejects stale, future, expired and rapid updates", () => {
-  assert.deepEqual(
+  expectDecision(
     publicationDecision(
       "owner",
       sharing(),
@@ -151,9 +168,10 @@ test("publication rejects stale, future, expired and rapid updates", () => {
       null,
       nowMs,
     ),
-    { allowed: false, reason: "STALE_CAPTURE" },
+    false,
+    "STALE_CAPTURE",
   );
-  assert.deepEqual(
+  expectDecision(
     publicationDecision(
       "owner",
       sharing(),
@@ -162,9 +180,10 @@ test("publication rejects stale, future, expired and rapid updates", () => {
       null,
       nowMs,
     ),
-    { allowed: false, reason: "FUTURE_CAPTURE" },
+    false,
+    "FUTURE_CAPTURE",
   );
-  assert.deepEqual(
+  expectDecision(
     publicationDecision(
       "owner",
       sharing(),
@@ -173,9 +192,10 @@ test("publication rejects stale, future, expired and rapid updates", () => {
       null,
       nowMs,
     ),
-    { allowed: false, reason: "SESSION_EXPIRED" },
+    false,
+    "SESSION_EXPIRED",
   );
-  assert.deepEqual(
+  expectDecision(
     publicationDecision(
       "owner",
       sharing(),
@@ -184,12 +204,13 @@ test("publication rejects stale, future, expired and rapid updates", () => {
       nowMs - 4_999,
       nowMs,
     ),
-    { allowed: false, reason: "RATE_LIMITED" },
+    false,
+    "RATE_LIMITED",
   );
 });
 
 test("authorized selected viewer can read fresh session-matched location", () => {
-  assert.deepEqual(
+  expectDecision(
     viewerReadDecision(
       "viewer",
       "owner",
@@ -199,12 +220,12 @@ test("authorized selected viewer can read fresh session-matched location", () =>
       location(),
       nowMs,
     ),
-    { allowed: true },
+    true,
   );
 });
 
 test("revoked or unselected viewer fails closed", () => {
-  assert.deepEqual(
+  expectDecision(
     viewerReadDecision(
       "viewer",
       "owner",
@@ -214,9 +235,10 @@ test("revoked or unselected viewer fails closed", () => {
       location(),
       nowMs,
     ),
-    { allowed: false, reason: "CONSENT_INACTIVE" },
+    false,
+    "CONSENT_INACTIVE",
   );
-  assert.deepEqual(
+  expectDecision(
     viewerReadDecision(
       "viewer",
       "owner",
@@ -226,12 +248,13 @@ test("revoked or unselected viewer fails closed", () => {
       location(),
       nowMs,
     ),
-    { allowed: false, reason: "VIEWER_NOT_SELECTED" },
+    false,
+    "VIEWER_NOT_SELECTED",
   );
 });
 
 test("stale location is never returned even when consent remains valid", () => {
-  assert.deepEqual(
+  expectDecision(
     viewerReadDecision(
       "viewer",
       "owner",
@@ -241,7 +264,8 @@ test("stale location is never returned even when consent remains valid", () => {
       location({ acceptedAtMs: nowMs - 120_001 }),
       nowMs,
     ),
-    { allowed: false, reason: "LOCATION_STALE" },
+    false,
+    "LOCATION_STALE",
   );
 });
 
@@ -250,7 +274,7 @@ test("two-user privacy flow: A shares, B sees A, A hides, B gets no location", (
   const activeSession = session();
   const activeLocation = location();
 
-  assert.deepEqual(
+  expectDecision(
     viewerReadDecision(
       "viewer",
       "owner",
@@ -260,7 +284,7 @@ test("two-user privacy flow: A shares, B sees A, A hides, B gets no location", (
       activeLocation,
       nowMs,
     ),
-    { allowed: true },
+    true,
   );
 
   const hiddenSharing: RemoteSharingState = {
@@ -279,7 +303,7 @@ test("two-user privacy flow: A shares, B sees A, A hides, B gets no location", (
     activeLocation,
     nowMs + 1,
   );
-  assert.deepEqual(afterHide, { allowed: false, reason: "SHARING_DISABLED" });
+  expectDecision(afterHide, false, "SHARING_DISABLED");
 
   const inFlightOldUpload = publicationDecision(
     "owner",
@@ -289,31 +313,33 @@ test("two-user privacy flow: A shares, B sees A, A hides, B gets no location", (
     activeLocation.acceptedAtMs,
     nowMs + 1,
   );
-  assert.deepEqual(inFlightOldUpload, {
-    allowed: false,
-    reason: "SHARING_DISABLED",
-  });
+  expectDecision(inFlightOldUpload, false, "SHARING_DISABLED");
 });
 
 test("block plus fetch and session restart races reject the old location", () => {
-  assert.equal(
+  expectDecision(
     viewerReadDecision(
       "viewer",
       "owner",
       sharing(),
-      consent({ relationship: "BLOCKED", ownerApproved: false, viewerApproved: false }),
+      consent({
+        relationship: "BLOCKED",
+        ownerApproved: false,
+        viewerApproved: false,
+      }),
       session(),
       location(),
       nowMs,
-    ).allowed,
+    ),
     false,
+    "CONSENT_INACTIVE",
   );
 
   const restarted = sharing({
     activeShareSessionId: "session-new-abcdefghijklmnopqrstuvwxyz",
     privacyEpoch: 8,
   });
-  assert.equal(
+  expectDecision(
     viewerReadDecision(
       "viewer",
       "owner",
@@ -322,7 +348,8 @@ test("block plus fetch and session restart races reject the old location", () =>
       session(),
       location(),
       nowMs,
-    ).allowed,
+    ),
     false,
+    "SESSION_MISMATCH",
   );
 });
