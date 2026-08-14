@@ -45,6 +45,7 @@ jobs:
           PY
           cp .ci/overrides/nearby_local_screen.dart ci_payload/apps/mobile/lib/features/nearby/nearby_local_screen.dart
           cp .ci/overrides/widget_test.dart ci_payload/apps/mobile/test/widget_test.dart
+          cp .ci/overrides/apply_native_overlays.py ci_payload/tools/apply_native_overlays.py
 
       - name: Install official Flutter stable tag
         shell: bash
@@ -94,7 +95,7 @@ jobs:
           cd ci_payload/apps/mobile
           yes | flutter doctor --android-licenses >/dev/null 2>&1 || true
           flutter build apk --debug --flavor development --dart-define=APP_ENV=development
-          flutter build apk --debug --flavor test --dart-define=APP_ENV=test
+          flutter build apk --debug --flavor testing --dart-define=APP_ENV=test
           flutter build apk --debug --flavor staging --dart-define=APP_ENV=staging
           flutter build apk --debug --flavor production --dart-define=APP_ENV=production
 
@@ -106,6 +107,7 @@ jobs:
           grep -F 'applicationId = "com.dC0dez.Whosaroundme.test"' android/app/build.gradle.kts
           grep -F 'applicationId = "com.dC0dez.Whosaroundme.staging"' android/app/build.gradle.kts
           grep -F 'applicationId = "com.dC0dez.Whosaroundme"' android/app/build.gradle.kts
+          grep -F 'create("testing")' android/app/build.gradle.kts
           ! grep -R 'ACCESS_BACKGROUND_LOCATION' android/app/src/main/AndroidManifest.xml
 
   ios:
@@ -136,6 +138,7 @@ jobs:
           PY
           cp .ci/overrides/nearby_local_screen.dart ci_payload/apps/mobile/lib/features/nearby/nearby_local_screen.dart
           cp .ci/overrides/widget_test.dart ci_payload/apps/mobile/test/widget_test.dart
+          cp .ci/overrides/apply_native_overlays.py ci_payload/tools/apply_native_overlays.py
 
       - name: Install official Flutter stable tag
         shell: bash
