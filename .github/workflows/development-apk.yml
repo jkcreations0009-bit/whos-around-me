@@ -1,0 +1,127 @@
+name: Development APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/development-apk.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: development-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.0"
+  PAYLOAD_SHA256: "dedde098d74b003ab837e567c36bf09bd2d38d8862d14fac6a6ec3f380ee7544"
+
+jobs:
+  build:
+    name: Verify and package development APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact repository revision
+        uses: actions/checkout@v7.0.1
+
+      - name: Reconstruct verified source through Phase 8E
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, tarfile
+          parts = sorted(pathlib.Path('.ci/payload').glob('part*.b64'))
+          assert len(parts) == 3, f"expected 3 payload parts, found {len(parts)}"
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          expected = '${{ env.PAYLOAD_SHA256 }}'
+          actual = hashlib.sha256(archive).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'payload checksum mismatch: {actual} != {expected}')
+          pathlib.Path('phase6b.tar.xz').write_bytes(archive)
+          with tarfile.open('phase6b.tar.xz', 'r:xz') as tf:
+              tf.extractall('.')
+          print(f'Payload verified: {actual}')
+          PY
+          cp .ci/overrides/nearby_local_screen.dart ci_payload/apps/mobile/lib/features/nearby/nearby_local_screen.dart
+          cp .ci/overrides/widget_test.dart ci_payload/apps/mobile/test/widget_test.dart
+          cp .ci/overrides/apply_native_overlays.py ci_payload/tools/apply_native_overlays.py
+          cp -R .ci/phase7_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase7.py
+          cp -R .ci/phase8_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8a.py
+          cp -R .ci/phase8b_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8b.py
+          cp -R .ci/phase8c_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8c.py
+          cp -R .ci/phase8d_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8d.py
+          cp -R .ci/phase8e_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8e.py
+
+      - name: Install official Flutter stable tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Generate Android project and apply verified native overlays
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          flutter create --platforms=android,ios --project-name nearby_contacts --org com.dC0dez .
+          cd ../..
+          python3 tools/apply_native_overlays.py
+
+      - name: Analyze and execute Flutter tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          flutter pub get
+          dart format lib test integration_test
+          dart format --output=none --set-exit-if-changed lib test integration_test
+          flutter analyze
+          flutter test
+
+      - name: Build development debug APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          yes | flutter doctor --android-licenses >/dev/null 2>&1 || true
+          flutter build apk --debug --flavor development --dart-define=APP_ENV=development
+
+      - name: Verify development identity and foreground-only privacy boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          grep -F 'applicationId = "com.dC0dez.Whosaroundme.dev"' android/app/build.gradle.kts
+          ! grep -R 'ACCESS_BACKGROUND_LOCATION' android/app/src/main/AndroidManifest.xml
+          ! grep -F 'Timer.periodic' lib/features/sharing/sharing_center_screen.dart
+          ! grep -F 'watchCurrentLocation' lib/features/sharing/sharing_center_screen.dart
+          test -f build/app/outputs/flutter-apk/app-development-debug.apk
+
+      - name: Prepare installable APK and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-apk
+          cp ci_payload/apps/mobile/build/app/outputs/flutter-apk/app-development-debug.apk \
+             release-apk/WhosAroundMe-development-debug.apk
+          sha256sum release-apk/WhosAroundMe-development-debug.apk | tee release-apk/SHA256SUMS.txt
+
+      - name: Upload development APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: whos-around-me-development-apk
+          path: release-apk/
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
