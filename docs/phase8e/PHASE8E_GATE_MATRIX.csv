@@ -1,0 +1,28 @@
+Gate,Requirement,Status,Evidence
+P8E-01,Privileged identity verification callable exists,PASS,GitHub Actions 31811388790 backend compile/tests
+P8E-02,Client cannot self-assert identity_verified,PASS,GitHub Actions 31811388790 security verifier
+P8E-03,Identity verification requires Firebase Admin verified email or phone evidence,PASS,GitHub Actions 31811388790 backend tests
+P8E-04,Identity verification callable requires Authentication + App Check + replay protection,PASS,GitHub Actions 31811388790 backend/security verifier
+P8E-05,Deployment workflow is manual-only and development-scoped,PASS,GitHub Actions 31811388790 workflow policy gate
+P8E-06,Exact manual confirmation required before secrets are touched,PASS,GitHub Actions 31811388790 workflow policy gate
+P8E-07,Protected development project ID required,PASS,GitHub Actions 31811388790 synthetic preflight
+P8E-08,Protected service-account credential required,PASS,GitHub Actions 31811388790 synthetic preflight
+P8E-09,Credential project must match deployment project,PASS,GitHub Actions 31811388790 valid + mismatch preflight tests
+P8E-10,Backend compile and security regressions before deploy,PASS,GitHub Actions 31811388790
+P8E-11,Firestore emulator security regression before deploy,PASS,GitHub Actions 31811388790
+P8E-12,Deployment scope limited to Firestore rules + Cloud Functions,PASS,phase8e-development-deploy.yml verified on main
+P8E-13,Temporary service-account credential removed after workflow,PASS,phase8e-development-deploy.yml always cleanup verified
+P8E-14,iOS development scheme exact bundle ID,PASS,GitHub Actions 31811815218 com.dC0dez.Whosaroundme.dev
+P8E-15,iOS test scheme exact bundle ID,PASS,GitHub Actions 31811815218 com.dC0dez.Whosaroundme.test
+P8E-16,iOS staging scheme exact bundle ID,PASS,GitHub Actions 31811815218 com.dC0dez.Whosaroundme.staging
+P8E-17,iOS production scheme exact bundle ID,PASS,GitHub Actions 31811815218 com.dC0dez.Whosaroundme
+P8E-18,iOS foreground-only contacts/location privacy configuration,PASS,GitHub Actions 31811815218
+P8E-19,Actual Firebase development deployment,NOT EXECUTED,Requires real Firebase development project + protected GitHub secrets
+P8E-20,Real Auth-provider sign-in,NOT EXECUTED,Requires deployed/configured Firebase development project
+P8E-21,Real identity_verified issuance + token refresh,NOT EXECUTED,Requires real Firebase Auth user and deployed callable
+P8E-22,Real Play Integrity/App Attest/DeviceCheck attestation,NOT EXECUTED,Requires configured physical devices and Firebase App Check
+P8E-23,Physical A-share/B-read/A-hide/B-denied security E2E,NOT EXECUTED,Requires deployed backend and two physical devices
+P8E-24,Physical revoke/block/session/privacyEpoch race tests,NOT EXECUTED,Requires deployed backend and physical devices
+P8E-25,Real permission/network/GPS/accessibility/battery validation,NOT EXECUTED,Requires real-device execution
+P8E-26,Phase 8E real-environment readiness,BLOCKED,External Firebase development configuration and physical devices still required
+P8E-27,Production readiness,NO,Real-environment security and device gates remain
