@@ -1,0 +1,169 @@
+name: Phase 8E iOS Environment Verification
+
+on:
+  push:
+    branches: [phase8e-ios-environments]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase8e-ios-environments-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.0"
+  XCODEPROJ_VERSION: "1.28.1"
+  PAYLOAD_SHA256: "dedde098d74b003ab837e567c36bf09bd2d38d8862d14fac6a6ec3f380ee7544"
+
+jobs:
+  ios_environments:
+    name: Phase 8E iOS Four-Environment Builds
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout verification repository
+        uses: actions/checkout@v7.0.1
+
+      - name: Reconstruct baseline and apply Phase 7 through Phase 8E readiness
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import base64, hashlib, pathlib, tarfile
+          parts = sorted(pathlib.Path('.ci/payload').glob('part*.b64'))
+          assert len(parts) == 3, f"expected 3 payload parts, found {len(parts)}"
+          encoded = ''.join(p.read_text().strip() for p in parts)
+          archive = base64.b64decode(encoded, validate=True)
+          expected = '${{ env.PAYLOAD_SHA256 }}'
+          actual = hashlib.sha256(archive).hexdigest()
+          if actual != expected:
+              raise SystemExit(f'payload checksum mismatch: {actual} != {expected}')
+          pathlib.Path('phase6b.tar.xz').write_bytes(archive)
+          with tarfile.open('phase6b.tar.xz', 'r:xz') as tf:
+              tf.extractall('.')
+          print(f'Payload verified: {actual}')
+          PY
+          cp .ci/overrides/nearby_local_screen.dart ci_payload/apps/mobile/lib/features/nearby/nearby_local_screen.dart
+          cp .ci/overrides/widget_test.dart ci_payload/apps/mobile/test/widget_test.dart
+          cp .ci/overrides/apply_native_overlays.py ci_payload/tools/apply_native_overlays.py
+          cp -R .ci/phase7_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase7.py
+          cp -R .ci/phase8_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8a.py
+          cp -R .ci/phase8b_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8b.py
+          cp -R .ci/phase8c_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8c.py
+          cp -R .ci/phase8d_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8d.py
+          cp -R .ci/phase8e_overrides/. ci_payload/
+          python3 ci_payload/tools/verify_phase8e.py
+          cp -R .ci/phase8e_ios_overrides/. ci_payload/
+
+      - name: Install official Flutter stable tag
+        shell: bash
+        run: |
+          git clone --depth 1 --branch "$FLUTTER_VERSION" https://github.com/flutter/flutter.git "$RUNNER_TEMP/flutter"
+          echo "$RUNNER_TEMP/flutter/bin" >> "$GITHUB_PATH"
+
+      - name: Install pinned Xcodeproj project editor
+        shell: bash
+        run: |
+          set -euo pipefail
+          gem install xcodeproj -v "$XCODEPROJ_VERSION" --no-document
+          ruby -e 'require "xcodeproj"; abort "unexpected xcodeproj version" unless Xcodeproj::VERSION == ENV.fetch("XCODEPROJ_VERSION"); puts Xcodeproj::VERSION'
+
+      - name: Verify macOS/Xcode/Flutter toolchain
+        shell: bash
+        run: |
+          flutter --version
+          dart --version
+          xcodebuild -version
+          swiftc --version
+          ruby --version
+          flutter doctor -v
+
+      - name: Generate platforms and apply native bridge plus iOS environments
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          flutter create --platforms=android,ios --project-name nearby_contacts --org com.dC0dez .
+          cd ../..
+          python3 tools/apply_native_overlays.py
+          ruby tools/configure_ios_environments.rb
+          python3 tools/verify_ios_environments.py
+
+      - name: Analyze and execute Flutter regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          flutter pub get
+          dart format lib test integration_test
+          dart format --output=none --set-exit-if-changed lib test integration_test
+          flutter analyze
+          flutter test
+
+      - name: Verify Xcode exposes all environment schemes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          xcodebuild -list -project ios/Runner.xcodeproj > "$RUNNER_TEMP/xcode-list.txt"
+          for scheme in development test staging production; do
+            grep -E "^[[:space:]]+$scheme$" "$RUNNER_TEMP/xcode-list.txt"
+          done
+
+      - name: Build development iOS simulator flavor and verify exact bundle ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          flutter build ios --simulator --no-codesign --flavor development --dart-define=APP_ENV=development
+          actual=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist)
+          test "$actual" = 'com.dC0dez.Whosaroundme.dev'
+          echo "development bundle: $actual"
+
+      - name: Build test iOS simulator flavor and verify exact bundle ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          flutter build ios --simulator --no-codesign --flavor test --dart-define=APP_ENV=test
+          actual=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist)
+          test "$actual" = 'com.dC0dez.Whosaroundme.test'
+          echo "test bundle: $actual"
+
+      - name: Build staging iOS simulator flavor and verify exact bundle ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          flutter build ios --simulator --no-codesign --flavor staging --dart-define=APP_ENV=staging
+          actual=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist)
+          test "$actual" = 'com.dC0dez.Whosaroundme.staging'
+          echo "staging bundle: $actual"
+
+      - name: Build production iOS simulator flavor and verify exact bundle ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          flutter build ios --simulator --no-codesign --flavor production --dart-define=APP_ENV=production
+          actual=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' build/ios/iphonesimulator/Runner.app/Info.plist)
+          test "$actual" = 'com.dC0dez.Whosaroundme'
+          echo "production bundle: $actual"
+
+      - name: Verify foreground-only iOS privacy configuration remains intact
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ci_payload/apps/mobile
+          /usr/libexec/PlistBuddy -c 'Print :NSContactsUsageDescription' ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c 'Print :NSLocationWhenInUseUsageDescription' ios/Runner/Info.plist
+          if /usr/libexec/PlistBuddy -c 'Print :NSLocationAlwaysUsageDescription' ios/Runner/Info.plist >/dev/null 2>&1; then exit 1; fi
+          if /usr/libexec/PlistBuddy -c 'Print :NSLocationAlwaysAndWhenInUseUsageDescription' ios/Runner/Info.plist >/dev/null 2>&1; then exit 1; fi
+          if /usr/libexec/PlistBuddy -c 'Print :UIBackgroundModes' ios/Runner/Info.plist 2>/dev/null | grep -F location; then exit 1; fi
